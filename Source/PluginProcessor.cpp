@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+//==============================================================================
 PimpleJuiceAudioProcessor::PimpleJuiceAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
     : AudioProcessor(
@@ -33,6 +34,7 @@ PimpleJuiceAudioProcessor::createParameterLayout() {
   return {params.begin(), params.end()};
 }
 
+//==============================================================================
 const juce::String PimpleJuiceAudioProcessor::getName() const {
   return JucePlugin_Name;
 }
@@ -63,7 +65,11 @@ bool PimpleJuiceAudioProcessor::isMidiEffect() const {
 
 double PimpleJuiceAudioProcessor::getTailLengthSeconds() const { return 0.0; }
 
-int PimpleJuiceAudioProcessor::getNumPrograms() { return 1; }
+int PimpleJuiceAudioProcessor::getNumPrograms() {
+  return 1; // NB: some hosts don't cope very well if you tell them there are 0
+            // programs, so this should be at least 1, even if you're not really
+            // implementing programs.
+}
 
 int PimpleJuiceAudioProcessor::getCurrentProgram() { return 0; }
 
@@ -81,12 +87,18 @@ void PimpleJuiceAudioProcessor::changeProgramName(int index,
   juce::ignoreUnused(index, newName);
 }
 
+//==============================================================================
 void PimpleJuiceAudioProcessor::prepareToPlay(double sampleRate,
                                               int samplesPerBlock) {
+  // Use this method as the place to do any pre-playback
+  // initialisation that you need..
   juce::ignoreUnused(sampleRate, samplesPerBlock);
 }
 
-void PimpleJuiceAudioProcessor::releaseResources() {}
+void PimpleJuiceAudioProcessor::releaseResources() {
+  // When playback stops, you can use this as an opportunity to free up any
+  // spare memory, etc.
+}
 
 #ifndef JucePlugin_PreferredChannelConfigurations
 bool PimpleJuiceAudioProcessor::isBusesLayoutSupported(
@@ -95,13 +107,20 @@ bool PimpleJuiceAudioProcessor::isBusesLayoutSupported(
   juce::ignoreUnused(layouts);
   return true;
 #else
+  // This is the place where you check if the layout is supported.
+  // In this template code we only support mono or stereo.
+  // Some plugin hosts, such as certain GarageBand versions, will only
+  // load plugins that support stereo bus layouts.
   if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono() &&
-      layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+      layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) {
     return false;
+  }
 
+  // This checks if the input layout matches the output layout
 #if !JucePlugin_IsSynth
-  if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
+  if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet()) {
     return false;
+  }
 #endif
 
   return true;
@@ -117,30 +136,55 @@ void PimpleJuiceAudioProcessor::processBlock(juce::AudioBuffer<float> &buffer,
   auto totalNumInputChannels = getTotalNumInputChannels();
   auto totalNumOutputChannels = getTotalNumOutputChannels();
 
-  for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
+#if !JucePlugin_IsSynth
+  // In case we have more outputs than inputs, this code clears any output
+  // channels that didn't contain input data, (because these aren't
+  // guaranteed to be empty - they may contain garbage).
+  // This is here to avoid people getting screaming feedback
+  // when they first compile a plugin, but obviously you don't need to keep
+  // this code if your algorithm always overwrites all the output channels.
+  for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i) {
     buffer.clear(i, 0, buffer.getNumSamples());
+  }
+#endif
 
   float gain = apvts.getRawParameterValue("gain")->load();
-  float mix = apvts.getRawParameterValue("mix")->load();
+  // float mix = apvts.getRawParameterValue ("mix")->load(); // Mix is less
+  // relevant for a pure synth, but keeping for now if we add FX later
 
-  for (int channel = 0; channel < totalNumInputChannels; ++channel) {
+  for (int channel = 0; channel < totalNumOutputChannels; ++channel) {
     auto *channelData = buffer.getWritePointer(channel);
-    for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
-      float dry = channelData[sample];
-      float wet = dry * gain;
-      channelData[sample] = dry * (1.0f - mix) + wet * mix;
+
+    // For a synth, we would render voices here.
+    // For now, let's just silence the output so it doesn't blast garbage.
+    // Once we add a synth engine, we will render audio here.
+    if (totalNumInputChannels == 0) {
+      buffer.clear(channel, 0, buffer.getNumSamples());
+    } else {
+      // If we somehow have inputs (e.g. effect synth), pass them through
+      // modified But usually synths ignore input.
+      for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+        channelData[sample] *= gain;
+      }
     }
   }
 }
 
-bool PimpleJuiceAudioProcessor::hasEditor() const { return true; }
+//==============================================================================
+bool PimpleJuiceAudioProcessor::hasEditor() const {
+  return true; // (change this to false if you choose to not supply an editor)
+}
 
 juce::AudioProcessorEditor *PimpleJuiceAudioProcessor::createEditor() {
   return new PimpleJuiceAudioProcessorEditor(*this);
 }
 
+//==============================================================================
 void PimpleJuiceAudioProcessor::getStateInformation(
     juce::MemoryBlock &destData) {
+  // You should use this method to store your parameters in the memory block.
+  // You could do that either as raw data, or use the XML or ValueTree classes
+  // as intermediaries
   auto state = apvts.copyState();
   std::unique_ptr<juce::XmlElement> xml(state.createXml());
   copyXmlToBinary(*xml, destData);
@@ -148,13 +192,20 @@ void PimpleJuiceAudioProcessor::getStateInformation(
 
 void PimpleJuiceAudioProcessor::setStateInformation(const void *data,
                                                     int sizeInBytes) {
+  // You should use this method to restore your parameters from this memory
+  // block, whose contents will have been created by the getStateInformation()
+  // call.
   std::unique_ptr<juce::XmlElement> xmlState(
       getXmlFromBinary(data, sizeInBytes));
-  if (xmlState.get() != nullptr)
-    if (xmlState->hasTagName(apvts.state.getType()))
+  if (xmlState.get() != nullptr) {
+    if (xmlState->hasTagName(apvts.state.getType())) {
       apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+    }
+  }
 }
 
+//==============================================================================
+// This creates new instances of the plugin..
 juce::AudioProcessor *JUCE_CALLTYPE createPluginFilter() {
   return new PimpleJuiceAudioProcessor();
 }
