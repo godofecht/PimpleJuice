@@ -1,13 +1,9 @@
 # PimpleJuice 🍊
 
-A better sampler plugin built with JUCE.
+The bubble's gotta burst.
+A better alternative to PampleJuice.
 
-## Features
-
-- 🎛️ Clean, modern UI with rotary controls
-- 🎚️ Gain and Mix parameters with full automation support
-- 💾 Parameter state persistence
-- 🔌 VST3, AU, and Standalone formats
+In progress. Don't make fun of me.
 
 ## Building
 
