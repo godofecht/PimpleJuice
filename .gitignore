@@ -1,0 +1,29 @@
+# Build directories
+build/
+cmake-build-*/
+
+# IDE files
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+
+# JUCE (added as submodule or cloned separately)
+JUCE/
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+
+# Plugin builds
+*.vst3
+*.component
+*.app
